@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -10,6 +11,7 @@ from app.services.device_service import (
     DeviceNotFoundError,
     DeviceService,
 )
+from app.services.probe import simulate_device_probe
 
 
 @pytest.fixture
@@ -33,6 +35,30 @@ def test_registration_and_lookup(service: DeviceService, device: DeviceCreate) -
     assert registered.status == "online"
     assert service.get("RTR-101") == registered
     assert service.list() == [registered]
+
+
+def test_empty_summary(service: DeviceService) -> None:
+    assert service.get_device_summary().model_dump() == {
+        "total_devices": 0,
+        "online_count": 0,
+        "offline_count": 0,
+        "device_types": [],
+    }
+
+
+def test_populated_summary_has_sorted_unique_types(
+    service: DeviceService, device: DeviceCreate
+) -> None:
+    service.register(device)
+    service.register(device.model_copy(update={"device_id": "SW-102", "device_type": "switch"}))
+    service.register(device.model_copy(update={"device_id": "RTR-103"}))
+    service.update_status("RTR-101", "offline")
+    assert service.get_device_summary().model_dump() == {
+        "total_devices": 3,
+        "online_count": 2,
+        "offline_count": 1,
+        "device_types": ["router", "switch"],
+    }
 
 
 def test_duplicate_registration(service: DeviceService, device: DeviceCreate) -> None:
@@ -109,3 +135,11 @@ def test_repository_results_cannot_mutate_stored_data(
 def test_invalid_device_fields(device: DeviceCreate, field: str, value: str) -> None:
     with pytest.raises(ValidationError):
         DeviceCreate.model_validate({**device.model_dump(), field: value})
+
+
+def test_simulated_device_probe() -> None:
+    assert asyncio.run(simulate_device_probe("RTR-101")) == {
+        "device_id": "RTR-101",
+        "reachable": True,
+        "simulated": True,
+    }

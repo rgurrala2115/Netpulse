@@ -1,14 +1,18 @@
 """Device and alert endpoints."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
-from app.models import AlertResponse, DeviceCreate, DeviceResponse, StatusUpdate
-from app.repositories.device_repository import InMemoryDeviceRepository
-from app.services.device_service import (
-	DeviceAlreadyExistsError,
-	DeviceNotFoundError,
-	DeviceService,
+from app.models import (
+	AlertResponse,
+	DeviceCreate,
+	DeviceProbeResponse,
+	DeviceResponse,
+	DeviceSummary,
+	StatusUpdate,
 )
+from app.repositories.device_repository import InMemoryDeviceRepository
+from app.services.device_service import DeviceService
+from app.services.probe import simulate_device_probe
 
 
 router = APIRouter()
@@ -22,15 +26,17 @@ service = DeviceService(InMemoryDeviceRepository())
 	responses={409: {"description": "Device already exists"}},
 )
 async def register_device(device: DeviceCreate) -> DeviceResponse:
-	try:
-		return service.register(device)
-	except DeviceAlreadyExistsError as error:
-		raise HTTPException(status_code=409, detail="Device already exists") from error
+	return service.register(device)
 
 
 @router.get("/devices", response_model=list[DeviceResponse])
 async def list_devices() -> list[DeviceResponse]:
 	return service.list()
+
+
+@router.get("/devices/summary", response_model=DeviceSummary)
+async def get_device_summary() -> DeviceSummary:
+	return service.get_device_summary()
 
 
 @router.get(
@@ -39,10 +45,17 @@ async def list_devices() -> list[DeviceResponse]:
 	responses={404: {"description": "Device not found"}},
 )
 async def get_device(device_id: str) -> DeviceResponse:
-	try:
-		return service.get(device_id)
-	except DeviceNotFoundError as error:
-		raise HTTPException(status_code=404, detail="Device not found") from error
+	return service.get(device_id)
+
+
+@router.get(
+	"/devices/{device_id}/probe",
+	response_model=DeviceProbeResponse,
+	responses={404: {"description": "Device not found"}},
+)
+async def probe_device(device_id: str) -> dict[str, str | bool]:
+	service.get(device_id)
+	return await simulate_device_probe(device_id)
 
 
 @router.patch(
@@ -51,10 +64,7 @@ async def get_device(device_id: str) -> DeviceResponse:
 	responses={404: {"description": "Device not found"}},
 )
 async def update_device_status(device_id: str, update: StatusUpdate) -> DeviceResponse:
-	try:
-		return service.update_status(device_id, update.status)
-	except DeviceNotFoundError as error:
-		raise HTTPException(status_code=404, detail="Device not found") from error
+	return service.update_status(device_id, update.status)
 
 
 @router.get("/alerts", response_model=list[AlertResponse])

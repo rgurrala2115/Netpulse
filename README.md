@@ -9,7 +9,7 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000/docs for the six endpoints, or
+Open http://127.0.0.1:8000/docs for the eight endpoints, or
 http://127.0.0.1:8000/openapi.json for the generated contract. FastAPI builds
 OpenAPI from the routes, response codes, and Pydantic models. The Swagger UI
 assets are served locally, so the interactive documentation works offline.
@@ -35,6 +35,17 @@ In `PATCH /devices/{device_id}/status`, enter `RTR-101` and execute twice with
 alert. Registering `RTR-101` again returns 409. If it already exists, restart
 the server or use a different ID such as `RTR-102`.
 
+Register a second device with `device_id` `SW-102`, device type `switch`, and
+IP address `192.168.10.2`. `GET /devices/summary` reports device counts and
+sorted unique device types. `GET /devices/RTR-101/probe` simulates an async
+check without contacting a device, changing its status, or creating an alert.
+
+Compare sequential and concurrent simulated probes with:
+
+```sh
+python -m examples.async_probe_demo
+```
+
 Run the isolated tests from the project root with:
 
 ```sh
@@ -45,7 +56,8 @@ python -m pytest -q
 
 - Routes validate HTTP requests and translate service errors to HTTP responses.
 - The service enforces device rules and detects online-to-offline transitions.
-- The repository owns the in-memory device and alert collections and returns copies.
+- The repository owns the in-memory device and alert collections and returns copies;
+	its protocol defines the contract used by the service and event handler.
 - The event handler records a UTC-stamped offline alert through the repository.
 
 NetPulse is one deployable modular monolith: its layers run together in one
