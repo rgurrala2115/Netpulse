@@ -2,11 +2,14 @@
 
 from datetime import datetime, timezone
 
+import structlog
+
 from app.models import AlertResponse
 from app.repositories.contracts import DeviceRepository
 
 
 def create_offline_alert(repository: DeviceRepository, device_id: str) -> None:
+	logger = structlog.get_logger("netpulse.events")
 	repository.save_alert(
 		AlertResponse(
 			device_id=device_id,
@@ -14,3 +17,4 @@ def create_offline_alert(repository: DeviceRepository, device_id: str) -> None:
 			timestamp=datetime.now(timezone.utc),
 		)
 	)
+	logger.info("offline_alert_created", device_id=device_id)

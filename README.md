@@ -16,8 +16,9 @@ assets are served locally, so the interactive documentation works offline.
 
 ## Swagger walkthrough
 
-For a clean walkthrough, restart the server first; all in-memory data is cleared
-on restart. In `POST /devices`, select **Try it out**, enter the following, and
+For a clean walkthrough, stop Uvicorn and delete only disposable `netpulse.db`
+if you want an empty database, then restart; persistent records survive normal
+server restarts. In `POST /devices`, select **Try it out**, enter the following, and
 execute (201):
 
 ```json
@@ -61,6 +62,30 @@ python -m pytest -q
 - The event handler records a UTC-stamped offline alert through the repository.
 
 NetPulse is one deployable modular monolith: its layers run together in one
-application process. A future database repository can implement the same methods
-and be injected into the service without changing its business rules. In-memory
-data is per process and is not shared across multiple workers or restarts.
+application process. The SQLite repository implements the same protocol methods
+and is injected into the service; changing repositories does not change business
+rules.
+
+## SQLite and runtime
+
+The app stores devices and alerts in `netpulse.db`. The SQLAlchemy session is
+request-scoped: it commits once after successful request completion, rolls back
+on exceptions, and closes in `finally`. `netpulse.db` is ignored by Git.
+Restarting Uvicorn preserves persisted records.
+
+Uvicorn is the ASGI server and FastAPI is the ASGI application. ASGI supports
+async endpoints such as the simulated probe. Database operations use synchronous
+SQLAlchemy, so HTTP data routes use `def` to avoid blocking async code. WSGI is
+the older synchronous Python web interface and does not use the ASGI protocol.
+
+## Structured logs and request tracing
+
+NetPulse emits JSON application events through `structlog`. Every response has an
+`X-Request-ID`: a supplied safe ID is returned; otherwise the app generates a
+UUID hex value. Route, service, alert and completion events share `request_id`,
+while `device_id` identifies the device. INFO records normal activity, WARNING
+records handled domain errors, and ERROR records unexpected failures.
+
+Do not log request bodies, passwords, tokens or connection URLs. The redaction
+processor masks exact `password`, `token`, `api_key`, `authorization` and `secret`
+keys as a last-resort safety net.

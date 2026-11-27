@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import structlog
+
 from app.events import create_offline_alert
 from app.models import AlertResponse, DeviceCreate, DeviceResponse, DeviceStatus, DeviceSummary
 from app.repositories.contracts import DeviceRepository
@@ -16,13 +18,16 @@ class DeviceNotFoundError(Exception):
 
 
 class DeviceService:
+	logger = structlog.get_logger("netpulse.service")
 	def __init__(self, repository: DeviceRepository) -> None:
 		self.repository = repository
 
 	def register(self, device: DeviceCreate) -> DeviceResponse:
 		if self.repository.get_device(device.device_id) is not None:
 			raise DeviceAlreadyExistsError(device.device_id)
-		return self.repository.add_device(DeviceResponse(**device.model_dump()))
+		registered = self.repository.add_device(DeviceResponse(**device.model_dump()))
+		self.logger.info("device_registered", device_id=registered.device_id)
+		return registered
 
 	def list(self) -> list[DeviceResponse]:
 		return self.repository.list_devices()
@@ -52,6 +57,8 @@ class DeviceService:
 		device = self.repository.update_status(device_id, status)
 		if device is None:
 			raise DeviceNotFoundError(device_id)
+		if previous.status != device.status:
+			self.logger.info("device_status_changed", device_id=device_id, status=device.status)
 		if previous.status == "online" and device.status == "offline":
 			create_offline_alert(self.repository, device_id)
 		return device

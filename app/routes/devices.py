@@ -1,6 +1,8 @@
 """Device and alert endpoints."""
 
-from fastapi import APIRouter, status
+import structlog
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 
 from app.models import (
 	AlertResponse,
@@ -10,13 +12,18 @@ from app.models import (
 	DeviceSummary,
 	StatusUpdate,
 )
-from app.repositories.device_repository import InMemoryDeviceRepository
+from app.db.database import get_session
+from app.repositories.sqlalchemy_device_repository import SQLAlchemyDeviceRepository
 from app.services.device_service import DeviceService
 from app.services.probe import simulate_device_probe
 
 
 router = APIRouter()
-service = DeviceService(InMemoryDeviceRepository())
+route_logger = structlog.get_logger("netpulse.routes")
+
+
+def get_device_service(session: Session = Depends(get_session, scope="function")) -> DeviceService:
+	return DeviceService(SQLAlchemyDeviceRepository(session))
 
 
 @router.post(
@@ -25,17 +32,18 @@ service = DeviceService(InMemoryDeviceRepository())
 	status_code=status.HTTP_201_CREATED,
 	responses={409: {"description": "Device already exists"}},
 )
-async def register_device(device: DeviceCreate) -> DeviceResponse:
+def register_device(device: DeviceCreate, service: DeviceService = Depends(get_device_service)) -> DeviceResponse:
+	route_logger.info("device_registration_requested", device_id=device.device_id)
 	return service.register(device)
 
 
 @router.get("/devices", response_model=list[DeviceResponse])
-async def list_devices() -> list[DeviceResponse]:
+def list_devices(service: DeviceService = Depends(get_device_service)) -> list[DeviceResponse]:
 	return service.list()
 
 
 @router.get("/devices/summary", response_model=DeviceSummary)
-async def get_device_summary() -> DeviceSummary:
+def get_device_summary(service: DeviceService = Depends(get_device_service)) -> DeviceSummary:
 	return service.get_device_summary()
 
 
@@ -44,7 +52,7 @@ async def get_device_summary() -> DeviceSummary:
 	response_model=DeviceResponse,
 	responses={404: {"description": "Device not found"}},
 )
-async def get_device(device_id: str) -> DeviceResponse:
+def get_device(device_id: str, service: DeviceService = Depends(get_device_service)) -> DeviceResponse:
 	return service.get(device_id)
 
 
@@ -53,7 +61,7 @@ async def get_device(device_id: str) -> DeviceResponse:
 	response_model=DeviceProbeResponse,
 	responses={404: {"description": "Device not found"}},
 )
-async def probe_device(device_id: str) -> dict[str, str | bool]:
+async def probe_device(device_id: str, service: DeviceService = Depends(get_device_service)) -> dict[str, str | bool]:
 	service.get(device_id)
 	return await simulate_device_probe(device_id)
 
@@ -63,12 +71,12 @@ async def probe_device(device_id: str) -> dict[str, str | bool]:
 	response_model=DeviceResponse,
 	responses={404: {"description": "Device not found"}},
 )
-async def update_device_status(device_id: str, update: StatusUpdate) -> DeviceResponse:
+def update_device_status(device_id: str, update: StatusUpdate, service: DeviceService = Depends(get_device_service)) -> DeviceResponse:
 	return service.update_status(device_id, update.status)
 
 
 @router.get("/alerts", response_model=list[AlertResponse])
-async def list_alerts() -> list[AlertResponse]:
+def list_alerts(service: DeviceService = Depends(get_device_service)) -> list[AlertResponse]:
 	return service.list_alerts()
 
 
