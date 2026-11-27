@@ -12,8 +12,8 @@ from app.models import (
 	DeviceSummary,
 	StatusUpdate,
 )
-from app.db.database import get_session
-from app.repositories.sqlalchemy_device_repository import SQLAlchemyDeviceRepository
+from app.db.session import get_db
+from app.repositories.mysql_device_repository import MySqlDeviceRepository
 from app.services.device_service import DeviceService
 from app.services.probe import simulate_device_probe
 
@@ -22,8 +22,8 @@ router = APIRouter()
 route_logger = structlog.get_logger("netpulse.routes")
 
 
-def get_device_service(session: Session = Depends(get_session, scope="function")) -> DeviceService:
-	return DeviceService(SQLAlchemyDeviceRepository(session))
+def get_device_service(session: Session = Depends(get_db, scope="function")) -> DeviceService:
+	return DeviceService(MySqlDeviceRepository(session))
 
 
 @router.post(

@@ -3,15 +3,12 @@
 import re
 import time
 import uuid
-from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi_offline import FastAPIOffline
 
-from app.db.database import engine
-from app.db.models import Base
 import app.db.models  # noqa: F401
 from app.logging_config import configure_logging
 from app.routes.devices import router
@@ -21,13 +18,7 @@ from app.services.device_service import DeviceAlreadyExistsError, DeviceNotFound
 configure_logging()
 logger = structlog.get_logger("netpulse.app")
 
-@asynccontextmanager
-async def lifespan(application):
-	Base.metadata.create_all(bind=engine)
-	yield
-
-
-app = FastAPIOffline(title="NetPulse", lifespan=lifespan)
+app = FastAPIOffline(title="NetPulse")
 app.include_router(router)
 
 

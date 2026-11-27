@@ -16,9 +16,9 @@ assets are served locally, so the interactive documentation works offline.
 
 ## Swagger walkthrough
 
-For a clean walkthrough, stop Uvicorn and delete only disposable `netpulse.db`
-if you want an empty database, then restart; persistent records survive normal
-server restarts. In `POST /devices`, select **Try it out**, enter the following, and
+Copy `.env.example` to `.env`, configure MySQL, then create the database and
+apply migrations. Persistent records survive normal Uvicorn restarts. In
+`POST /devices`, select **Try it out**, enter the following, and
 execute (201):
 
 ```json
@@ -62,16 +62,33 @@ python -m pytest -q
 - The event handler records a UTC-stamped offline alert through the repository.
 
 NetPulse is one deployable modular monolith: its layers run together in one
-application process. The SQLite repository implements the same protocol methods
+application process. The MySQL repository implements the same protocol methods
 and is injected into the service; changing repositories does not change business
 rules.
 
-## SQLite and runtime
+## MySQL, Alembic and runtime
 
-The app stores devices and alerts in `netpulse.db`. The SQLAlchemy session is
-request-scoped: it commits once after successful request completion, rolls back
-on exceptions, and closes in `finally`. `netpulse.db` is ignored by Git.
-Restarting Uvicorn preserves persisted records.
+The app stores devices and alerts in MySQL. Copy `.env.example` to `.env`, ensure
+MySQL is running, and set `DATABASE_URL` or the individual `MYSQL_*` values.
+Apply migrations from the project root:
+
+```sh
+alembic upgrade head
+alembic current
+```
+
+The SQLAlchemy session is request-scoped: it commits once after successful
+request completion, rolls back on exceptions, and closes in `finally`. Never commit
+inside the service or repository. `.env`, virtual environments and database files
+are excluded from Git.
+
+The initial migration creates `devices` and `alerts`; the second migration adds
+the optional `devices.location` column. Review migrations with:
+
+```sh
+alembic downgrade -1
+alembic upgrade head
+```
 
 Uvicorn is the ASGI server and FastAPI is the ASGI application. ASGI supports
 async endpoints such as the simulated probe. Database operations use synchronous
